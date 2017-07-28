@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Index</title>
+<style>
+@font-face
+{
+	font-family: font;
+	src: url("font.ttf");
+}
+
+body
+{
+	font-family: font;
+	color: white;
+	background-color: black;
+	width: 50%;
+	line-height: 20px;
+}
+
+#outputParagraph
+{
+	overflow-y: hidden;
+}
+
+#input
+{
+	font-family: font;
+	color: white;
+	background-color: black;
+}
+</style>
+</head>
+<body>
+<p id = "outputParagraph"></p>
+<input id = "input" type = "text" size = "80" maxcharacters = "120" autofocus>
+<script src = "inherit.js"></script>
+<script src = "color.js"></script>
+<script src = "character.js"></script>
+<script src = "dialogue.js"></script>
+<script src = "room.js"></script>
+<script src = "chat_line.js"></script>
+<script>
+var outputParagraph = document.getElementById("outputParagraph");
+var input = document.getElementById("input");
+
+input.addEventListener("keydown", onInputKey);
+input.addEventListener("blur", onInputBlur);
+
+outputParagraph.style.width = window.innerWidth - 50 + "px";
+outputParagraph.style.height = window.innerHeight/2 + "px";
+
+var activeDialogue = null;
+
+var activeRoom = null;
+
+var roomX = 0;
+var roomY = 0;
+
+var waitingFreeInput = false;
+
+var freeInputField = "name";
+
+var playerName = null;
+
+var printQueue = [];
+
+var normalDelay = 4000;
+var dialogueDelay = normalDelay;
+var choiceResponseDelay = 1000;
+var shortDelay = 500;
+
+//remove later
+
+/*normalDelay = 0;
+dialogueDelay = 0;
+choiceResponseDelay = 0;
+shortDelay = 0;*/
+
+var deathCount = 0;
+
+var nameJokes = 
+[
+	"What were your parents thinking...",
+	"Not the best name I have ever seen, just saying.",
+	"What planet are you from with a name like that?"
+];
+
+var deathJokes = 
+[
+	"You should, uh, not do that. It is kind of, you know, fatal.",
+	"Sigh. You had to die twice, didn't you...",
+	"Third times the charm, right?",
+	"Fourth times the... person who keeps getting killed?",
+	"You have died once for every finger on your hand. Coincidence? I think so.",
+	"Not even my cat died 6 times.",
+	"Maybe you only died once and are a dog or something.",
+	"Not a very lively person are you? Do you like death or something?",
+	"Here. I have a message for you. Stop dying. This is embarrassing.",
+	"All the other old men are mocking me for my bad choice...",
+	"I should have just sent my parrot in instead.",
+	"If you look up, the word gullible is on the ceiling.",
+];
+
+var freeInput = {};
+
+var onDialogue = {};
+
+var floorCount = 1;
+var roomsPerFloor = 1;
+
+var rooms = [];
+var possibleRooms = [];
+
+for (var i = 0; i < floorCount; ++i)
+{
+	var arr = [];
+	var arr2 = [];
+
+	for (var j = 0; j < roomsPerFloor; ++j)
+	{
+		arr.push(null);
+		arr2.push(null);
+	}
+
+	rooms[i] = arr;
+	possibleRooms[i] = arr2;
+}
+
+//x is floor, y is room number
+
+possibleRooms[0][0] = new BeeRoom();
+possibleRooms[0][1] = new SandTrapRoom();
+possibleRooms[0][2] = new RandomWizardRoom();
+possibleRooms[0][3] = new BoulderRoom();
+possibleRooms[0][4] = new HistoryRoom();
+possibleRooms[0][5] = new MirrorRoom();
+possibleRooms[0][6] = new MontyHallRoom();
+
+floorCount = possibleRooms.length;
+roomsPerFloor = possibleRooms[0].length;
+
+function generateRooms()
+{
+	/*for (var x = 0; x < floorCount; ++x)
+	{
+		var indicesLeft = [];
+
+		for (var y = 0; y < roomsPerFloor; ++y)
+			indicesLeft.push(y);
+
+		for (var y = 0; y < roomsPerFloor; ++y)
+		{
+			var randomNumber = randomInt(indicesLeft.length);
+
+			rooms[x][y] = possibleRooms[x][indicesLeft[randomNumber]];
+
+			indicesLeft.splice(randomNumber, 1);
+		}
+	}*/
+
+	for (var x = 0; x < floorCount; ++x)
+		for (var y = 0; y < roomsPerFloor; ++y)
+			rooms[x][y] = possibleRooms[x][y];
+}
+
+generateRooms();
+
+function death()
+{
+	++deathCount;
+
+	print("You have died `" + deathCount + "` times.", [emphasisColor, Color.white], 2000);
+
+	if (deathCount < deathJokes.length)
+		print(deathJokes[deathCount - 1]);
+	else
+		print("You have died so many times, I ran out of jokes...");
+
+	print("Let's try that again.");
+	print("---", 1000);
+
+	activeRoom.run();
+}
+
+function nextRoom()
+{
+	activeRoom = null;
+
+	var prevY = roomY;
+
+	++roomY;
+
+	if (roomY == roomsPerFloor)
+	{
+		roomY = 0;
+
+		++roomX;
+	}
+
+	if (roomX == floorCount)
+		endRoom();
+	else
+	{
+		print("You leave the room, and enter the next.");
+
+		if (prevY != roomY)
+			;//print("You are now on floor `" + (roomY + 1) + "`.", [emphasisColor, Color.white]);
+
+		rooms[roomX][roomY].run();
+	}
+}
+
+function endRoom()
+{
+	activeRoom = null;
+
+	waitingFreeInput = false;
+
+	print("You enter the last room.");
+	print("There is a chest in the room. You open it.");
+	print("Inside are many precious `gems` and `coins`, all sparkling.", [Color.red, Color.white, Color.gold, Color.white]);
+	print("A staircase leads back to the surface.");
+	print("---");
+	print("You present the treasure to the old man.");
+
+	oldMan.say("Well done! I must say, I didn't expect you to survive, honestly.");
+	oldMan.say("But hey, you made it, so that works.");
+	oldMan.say("So I will take that treasure there, thank you.");
+
+	print("The man takes the chest.")
+
+	oldMan.say("Still, you deserve some kind of finder's fee, wouldn't you say? Here, take this.");
+
+	print("The man reaches into his pocket and gives you a quarter.");
+
+	oldMan.say("Now go off and buy yourself some candy as a reward.");
+
+	print("--- THE END ---", 8000);
+}
+
+freeInput["name"] = function(text)
+{
+	if (text.indexOf(" ") > -1)
+	{
+		print("Um... your name has spaces. What kind of name is that? Try again.", shortDelay);
+
+		waitingFreeInput = true;
+
+		return;
+	}
+
+	if (text.length > 15)
+	{
+		print("That's a big name you got there, fella. Any shorter version?", shortDelay);
+
+		waitingFreeInput = true;
+
+		return;
+	}
+
+	playerName = text;
+
+	print("So the name is `" + playerName + "`, huh?", [emphasisColor, Color.white], shortDelay);
+	print(randomFromArray(nameJokes) + " Well, that will have to do.", 2000);
+	print("---", 3000);
+	print("You wake up. In your bed - who would have thunk it? You wander outside.", 2000);
+	print("An old man approaches.");
+
+	oldMan.say(oldManDialogue1);
+};
+
+freeInput["dwarf"] = function(text)
+{
+	var dwarfs = 
+	[
+		"bashful",
+		"doc",
+		"dopey",
+		"grumpy",
+		"happy",
+		"sleepy",
+		"sneezy"
+	];
+
+	text = text.toLowerCase();
+
+	if (text.charAt(text.length - 1) == ".")
+		text = text.substr(0, text.length - 1);
+
+	var index = dwarfs.indexOf(text);
+
+	if (index > -1)
+	{
+		mirror.say("Correct. I suppose you aren't the worst adventurer I have seen.", choiceResponseDelay);
+		mirror.say("Very well then, go on.");
+
+		print("A door appears in the wall.");
+
+		nextRoom();
+	}
+	else
+	{
+		mirror.say("I don't know of a dwarf named `" + text + "`. Incorrect. You are just like the rest of them.", [emphasisColor, Color.white], choiceResponseDelay);
+
+		print("The mirror vanishes, leaving you stranded.");
+		print("`You eventually die.", [deathColor]);
+
+		death();
+	}
+};
+
+onDialogue["oldManDialogue1"] = function(option)
+{
+	if (option == "no")
+	{
+		oldMan.say("Look at it this way, kid. If you choose no, the game is over. But you are playing the game. So choose yes. I am tired of your nonsense.", choiceResponseDelay);
+
+		return;
+	}
+
+	if (option == "yes")
+	{
+		oldMan.say("Good. I would do it myself, but I am too old, you see.", choiceResponseDelay);
+		oldMan.say("There is a treasure buried deep, in a labyrinth.");
+		oldMan.say("The entrance is in a cave hidden in the cliffside.");
+		oldMan.say("So... go get it. Oh, and don't die. The usual stuff, you understand.");
+
+		print("---", 2000);
+		print("You enter the cave.");
+		print("You go back further into the cave, and enter a room.");
+
+		rooms[0][0].run();
+
+		return;
+	}
+};
+
+onDialogue["beeRoomDialogue"] = function(option)
+{
+	if (option == "check")
+	{
+		print("You go closer and see what it is.", choiceResponseDelay);
+
+		if (true)//activeRoom.bad)
+		{
+			print("It looks like `honey`. Weird. Why would honey be down here?", [Color.gold, Color.white]);
+			print("You take a taste. Delicious.");
+			print("You hear buzzing. The sound gets louder...");
+			print("You are surrounded by bees!");
+			print("`You were stung to death.", [deathColor]);
+
+			death();
+		}
+	}
+	else if (option == "pass")
+	{
+		print("You pass through the room.", choiceResponseDelay);
+
+		nextRoom();
+	}
+};
+
+onDialogue["sandRoomDialogue"] = function(option)
+{
+	if (option == "wrong")
+	{
+		print("You pulled the levers, but nothing happened!", choiceResponseDelay);
+		print("`The room fills with sand. You are buried alive.", [deathColor]);
+
+		death();
+	}
+
+	if (option == "right")
+	{
+		print("You pull the levers. The section of wall closes, and a door opens next to you.", choiceResponseDelay);
+
+		nextRoom();
+	}
+};
+
+onDialogue["wizardDialogue1"] = function(option)
+{
+	if (option == "no")
+	{
+		randomWizard.say("Are you calling my ball a liar?", choiceResponseDelay);
+		randomWizard.say("Ah! But the ball knew you would say that.");
+
+		wizardDialogue1Func(false);
+	}
+	else
+	{
+		wizardDialogue1Func(true);
+	}
+};
+
+function wizardDialogue1Func(yes)
+{
+	randomWizard.say((yes ? "Excellent. " : "") + "The ball knows everything, I tell you. Except my birthday. Apparently it cannot be bothered.", (yes ? choiceResponseDelay : undefined));
+	randomWizard.say("Then again, I cannot remember my birthday either...");
+	randomWizard.say("Good ole' ball and me, we are good friends, you see.");
+
+	print("The wizard rubs the ball lovingly.");
+
+	randomWizard.say("What's that, bally?");
+
+	print("The wizard leans closer to the ball.");
+
+	randomWizard.say("That can't be... are you sure? I see.");
+	randomWizard.say("Bally says you are a thief. You are trying to `steal` bally!", [Color.red, Color.white]);
+	randomWizard.say("Begone, smelly!");
+
+	print("The wizard snapped his fingers, and you were teleported out of the room.");
+
+	nextRoom();
+}
+
+onDialogue["boulderRoomDialogue"] = function(option)
+{
+	if (option == "run")
+	{
+		print("You run towards the door.", choiceResponseDelay);
+		print("You reach the door, but it is locked!");
+		print("The boulder hits you... and nothing happens.");
+		print("You feel the boulder. It feels... plastic?");
+		print("It is light. You can push it back up the ramp.");
+		print("You lift it over you, and put it behind you.");
+		print("You proceed up the ramp.");
+
+		nextRoom();
+	}
+
+	if (option == "jump")
+	{
+		print("You run towards the boulder, and jump.", choiceResponseDelay);
+		print("You land on top of the boulder, and hear a loud pop as it explodes, dropping you on the floor.");
+		print("It appears the boulder was hollow. The skin feels plastic.");
+		print("You proceed up the ramp.");
+
+		nextRoom();
+	}
+};
+
+onDialogue["historyRoomDialogue"] = function(option)
+{
+	if (option == "wrong")
+	{
+		historyGuy.say("Wrong! You know what that means, don't you?", choiceResponseDelay);
+
+		print("You hear the crowd chant \"Death! Death! Death!\"");
+
+		historyGuy.say("Yes, that is right! And how should `" + playerName + "` die?", [emphasisColor, Color.white]);
+
+		var randomNum = randomInt(4);
+
+		var method = null;
+
+		switch (randomNum)
+		{
+			case 0:
+
+				method = "Monkeys";
+
+				break;
+
+			case 1:
+
+				method = "Watermelons";
+
+				break;
+
+			case 2:
+
+				method = "Boredom";
+
+				break;
+
+			case 3:
+
+				method = "Embarrassment";
+
+				break;
+		}
+
+		print("The crowd chants \"" + method + "! " + method + "! " + method + "!\".");
+
+		historyGuy.say("Excellent! Death by " + method.toLowerCase() + " it is!");
+
+		print("`You have died by " + method.toLowerCase() + ".", [deathColor]);
+
+		death();
+	}
+
+	if (option == "right")
+	{
+		historyGuy.say("Correct! I guess you don't die. Bring out the next contestant!", choiceResponseDelay);
+
+		print("You hear the crowd say \"Aw...\".");
+
+		nextRoom();
+	}
+};
+
+onDialogue["montyHallRoomDialogue"] = function(option)
+{
+	activeRoom.option = option;
+
+	monty.say("Ok, door `" + option + "`. Now, one of the two doors you didn't chose was death. I have now eliminated it.", [emphasisColor, Color.white], choiceResponseDelay);
+	monty.say("Do you want to switch to the remaining door, or stay with the one you have now?");
+
+	montyHallRoomDialogue2.print();
+};
+
+onDialogue["montyHallRoomDialogue2"] = function(option)
+{
+	var won;
+
+	if (option == "switch")
+	{
+		print("You switched doors.", choiceResponseDelay);
+
+		if (activeRoom.option != activeRoom.goodRoom)
+			won = true;
+		else
+			won = false;
+	}
+
+	if (option == "stay")
+	{
+		print("You stayed with your door.", choiceResponseDelay);
+
+		if (activeRoom.option == activeRoom.goodRoom)
+			won = true;
+		else
+			won = false;
+	}
+
+	if (won)
+	{
+		print("You chose the right door!");
+
+		nextRoom();
+	}
+	else
+	{
+		print("You chose the wrong door!");
+
+		var ran = randomInt(2);
+
+		if (ran == 0)
+			print("`You died from stampeding llamas.", [deathColor]);
+		else
+			print("`You died from fear of the number 72.", [deathColor]);
+
+		death();
+	}
+};
+
+var oldMan = new Character("Old Man");
+var randomWizard = new Character("Wizard");
+var historyGuy = new Character("Man");
+var mirror = new Character("Mirror");
+var monty = new Character("Monty Hall");
+
+var oldManDialogue1 = new Dialogue("Do you want to go on a quest?",
+                            [],
+                            [
+                            new ChatOption("yes", "yes"),
+                            new ChatOption("no", "no")
+                            ],
+                            onDialogue["oldManDialogue1"]
+                            );
+
+var beeRoomDialogue = new Dialogue("Check it out, or pass through the room?",
+	                                [],
+	                                [
+	                                new ChatOption("check", "check"),
+	                                new ChatOption("pass", "pass")
+	                                ],
+	                                onDialogue["beeRoomDialogue"]
+	                                );
+
+var sandRoomDialogue = new Dialogue("How should the levers be pulled?",
+									 [],
+									 [
+									 new ChatOption("up-down-down", "wrong"),
+									 new ChatOption("down-up-down", "wrong"),
+									 new ChatOption("up-down-up", "right"),
+									 new ChatOption("up-up-up", "wrong")
+									 ],
+									 onDialogue["sandRoomDialogue"]
+	                                 );
+
+var wizardDialogue1 = new Dialogue("",
+									[],
+									[
+									new ChatOption("yes", "yes"),
+									new ChatOption("no", "no"),
+									],
+									onDialogue["wizardDialogue1"]
+									);
+
+var boulderRoomDialogue = new Dialogue("Run back to the door, or attempt to jump over the boulder?",
+                                        [],
+                                        [
+                                        new ChatOption("run", "run"),
+                                        new ChatOption("jump", "jump")
+                                        ],
+                                        onDialogue["boulderRoomDialogue"]
+										);
+
+var historyRoomDialogue = new Dialogue("",
+	                                    [],
+	                                    [
+	                                    new ChatOption("1850", "wrong"),
+	                                    new ChatOption("1934", "wrong"),
+	                                    new ChatOption("1904", "wrong"),
+	                                    new ChatOption("1914", "right")
+	                                    ],
+	                                    onDialogue["historyRoomDialogue"]
+	                                    );
+
+var montyHallRoomDialogue = new Dialogue("One, two, or three?",
+				                          [],
+				                          [
+										  new ChatOption("one", 1),
+										  new ChatOption("two", 2),
+										  new ChatOption("three", 3)
+										  ],
+										  onDialogue["montyHallRoomDialogue"]
+										  );
+
+var montyHallRoomDialogue2 = new Dialogue("",
+										   [],
+										   [
+										   new ChatOption("stay", "stay"),
+										   new ChatOption("switch", "switch")
+										   ],
+										   onDialogue["montyHallRoomDialogue2"]
+										   );
+
+Color.addColor("lime");
+Color.addColor("gold");
+Color.addColor("orange");
+Color.addColor("cyan");
+Color.addColor("brown");
+Color.addColor("tan");
+Color.addColor("purple");
+Color.addColor("red");
+
+var emphasisColor = Color.lime;
+var deathColor = Color.orange;
+var textColor = Color.cyan;
+
+function randomInt(max)
+{
+	var value = Math.floor(Math.random()*max);
+
+	if (value == max)
+		value = max - 1;
+
+	return value;
+}
+
+function randomFromArray(array)
+{
+	var index = randomInt(array.length);
+
+	return array[index];
+}
+
+function onInputBlur()
+{
+	input.focus();
+}
+
+function scroll()
+{
+	outputParagraph.scrollTop = outputParagraph.scrollHeight;
+}
+
+function onInputKey(e)
+{
+	if (e.keyCode == 13)
+	{
+		onInputSubmit();
+
+		e.preventDefault();
+	}
+
+	if (e.keyCode == 38)
+	{
+		outputParagraph.scrollTop -= 20;
+
+		e.preventDefault();
+	}
+
+	if (e.keyCode == 40)
+	{
+		outputParagraph.scrollTop += 20;
+
+		e.preventDefault();
+	}
+}
+
+function onInputSubmit()
+{
+	if (printQueue.length != 0)
+	{
+		input.value = "";
+
+		return;
+	}
+
+	var text = input.value;
+
+	input.value = "";
+
+	_print(text);
+
+	if (waitingFreeInput)
+	{
+		onFreeInput(text);
+
+		return;
+	}
+
+	if (activeDialogue != null)
+	{
+		var strings = activeDialogue.optionStrings;
+
+		text = text.toLowerCase();
+
+		if (text.charAt(text.length - 1) == ".")
+			text = text.substr(0, text.length - 1);
+
+		var index = strings.indexOf(text);
+
+		if (index > -1)
+		{
+			activeDialogue.onChoice(activeDialogue.options[index].returnValue);
+		}
+		else
+		{
+			var optionsString = "Invalid option. Options: ";
+
+			for (var i = 0; i < strings.length; ++i)
+				optionsString = optionsString + strings[i] + ", ";
+
+			optionsString = optionsString.substr(0, optionsString.length - 2) + ".";
+
+			_print(optionsString);
+		}
+	}
+}
+
+function onFreeInput(text)
+{
+	waitingFreeInput = false;
+
+	text = text.trim();
+
+	freeInput[freeInputField](text);
+}
+
+/*function print(text)
+{
+	if (outputParagraph.innerHTML == "")
+		outputParagraph.innerHTML = text;
+	else
+		outputParagraph.innerHTML = outputParagraph.innerHTML + "<br>" + text;
+
+	scroll();
+}*/
+
+/*function printCD(text, colors, timeout)
+{
+	_printD(text, colors, timeout);
+}
+
+function printD(text, timeout)
+{
+	_printD(text, [], colors);
+}*/
+
+function print(text, arg2, arg3)
+{
+	var hasColors = arg2 != undefined && arg2 != null && arg2.constructor == Array;
+	var arg2Delay = typeof arg2 == "number";
+
+	if (hasColors)
+		_printD(text, arg2, arg3);
+	else if (arg2Delay)
+		_printD(text, [], arg2);
+	else if (true)
+		_printD(text, arg2, arg3);
+}
+
+var p = print;
+
+function _printD(text, colors, timeout)
+{
+	if (timeout == undefined)
+		timeout = normalDelay;
+
+	var message = {"text": text, "colors": colors, "time": timeout};
+
+	if (printQueue.length == 0)
+	{
+		printQueue.push(message);
+
+		setTimeout(__printD, message.time, message);
+	}
+	else
+		printQueue.push(message);
+}
+
+function __printD(message)
+{
+	_print(message.text, message.colors);
+
+	printQueue.splice(printQueue.indexOf(message), 1);
+
+	if (!(printQueue.length == 0))
+	{
+		var message = printQueue[0];
+
+		setTimeout(__printD, message.time, message);
+	}
+}
+
+function _print(text, colors, formatChar)
+{
+	formatChar = formatChar || "`";
+	colors = colors || [];
+
+	var splitStrings = text.split(formatChar);
+
+	if (splitStrings.length == 0)
+		throw "Invalid splitstring?";
+
+	if (splitStrings.length - 1 != colors.length)
+		throw "Format character count does not match color count - string is \"" + text + ", there are " + colors.length + " colors.";
+
+	var strings = [];
+
+	var first = splitStrings[0];
+
+	strings.push(first);
+
+	for (var i = 1; i < splitStrings.length; ++i)
+	{
+		var str = splitStrings[i];
+
+		var color = colors[i - 1];
+
+		strings.push("<span style = 'color: " + color.toCSSString() + "'>" + str + "</span>");
+	}
+
+	var combined = "";
+
+	for (var i = 0; i < strings.length; ++i)
+		combined = combined + strings[i];
+
+	if (outputParagraph.innerHTML == "")
+		outputParagraph.innerHTML = combined;
+	else
+		outputParagraph.innerHTML = outputParagraph.innerHTML + "<br>" + combined;
+
+	scroll();
+}
+
+print("What is your name, adventurer?", 0);
+
+waitingFreeInput = true;
+
+freeInputField = "name";
+
+//playerName = "Jacob";
+
+//shortcut, get rid of later
+/*waitingFreeInput = false;
+
+rooms[0][0].run();*/
+
+//rooms[floorCount - 1][roomsPerFloor - 1].run();
+
+//endRoom();
+
+</script>
+</body>
+</html>	
